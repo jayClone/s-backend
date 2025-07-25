@@ -73,6 +73,7 @@ class Role:
             collection = Role.get_collection()
             if collection is None:
                 print("Database Connection Error")
+                return False
             existing_docs_count = collection.count_documents({})
             if existing_docs_count > 0:
                 print("Roles collection is not empty. Skipping default roles creation.")
@@ -108,6 +109,7 @@ class Role:
             raise http_exc
         except Exception as e:
             print(f"Error in create_default_roles: {str(e)}")
+            return False
 
     @staticmethod
     def get_role_by_name(name: str) -> Optional[Dict[str, Any]]:

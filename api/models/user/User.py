@@ -3,7 +3,7 @@ import json
 from bson import ObjectId
 from fastapi import HTTPException, Request
 from pydantic import BaseModel, EmailStr, field_validator
-from typing import List, Tuple
+from typing import List, Tuple, Union
 from api.db import db
 from api.extensions.jwt import create_token, verify_token, extract_token_from_request
 from api.models.user.Role import Role
@@ -58,7 +58,12 @@ class User:
         self.username = username
         self.first_name = first_name
         self.last_name = last_name
-        self.email = email if isinstance(email, list) else [email]
+        if isinstance(email, str):
+            self.email = [email]
+        elif isinstance(email, list):
+            self.email = [str(e) for e in email]
+        else:
+            self.email = []
         self.password = password
         self.role = role
         self.role_status = role_status
@@ -518,6 +523,8 @@ class User:
                 raise HTTPException(status_code=404, detail="User not found")
 
             user = User.get_by_email(email)
+            if not user:
+                raise HTTPException(status_code=404, detail="User not found")
 
             # Generate the token
 
