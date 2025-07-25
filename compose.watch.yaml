@@ -6,7 +6,7 @@ services:
       context: .
       dockerfile: Dockerfile
     ports:
-      - ":10001"
+      - "10021:10001"
     networks:
       - shared
     env_file:
@@ -34,7 +34,7 @@ services:
     container_name: redis
     restart: "no"
     ports:
-      - ":6379"
+      - "10002:6379"
     volumes:
       - redis_data:/data
     networks:
@@ -45,7 +45,7 @@ services:
     container_name: mongodb
     restart: "no"
     ports:
-      - ":27017"
+      - "10001:27017"
     volumes:
       - mongodb_data:/data/db
     networks:
