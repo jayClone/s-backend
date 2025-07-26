@@ -1,16 +1,13 @@
 from datetime import datetime, timezone, timedelta
-import json
 from bson import ObjectId
 from fastapi import HTTPException, Request
-from pydantic import BaseModel, Field, EmailStr
-from typing import Optional, Literal, Tuple, Union
+from pydantic import BaseModel, EmailStr
+from typing import Optional, Literal, Tuple
 from api.db import db
 from api.extensions.jwt import create_token, verify_token, extract_token_from_request
 from api.models.user.Role import Role
-from models.Base import PyObjectId
-from models.Location import LocationModel
+from api.models.Location import LocationModel
 import bcrypt
-import os
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -28,7 +25,7 @@ def get_by_username(username):
             return None
 
 class UserModel(BaseModel):
-    id: Optional[PyObjectId] = Field(default_factory=PyObjectId, alias="_id")
+    id: ObjectId
     name: str
     email: EmailStr
     password: str
@@ -40,7 +37,7 @@ class UserModel(BaseModel):
 
     class Config:
         allow_population_by_field_name = True
-        json_encoders = {PyObjectId: str}
+        json_encoders = {ObjectId: str}
 
 class User:
     @staticmethod
@@ -109,6 +106,7 @@ class User:
 
             # Validate data using the schema
             user_data = UserModel(
+                id= ObjectId(),
                 name=self.name,
                 email=self.email,
                 password=self.password,
@@ -116,8 +114,7 @@ class User:
                 phone2=self.phone2,
                 location=self.location,
                 proof_id=self.proof_id,
-                role=self.role,
-                _id=self._id if hasattr(self, '_id') else None
+                role=self.role
             ).model_dump(by_alias=True)
 
             if self._id:

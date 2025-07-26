@@ -1,16 +1,17 @@
+from bson import ObjectId
 from pydantic import BaseModel, Field
 from typing import Optional, List, Literal
 from datetime import datetime
-from models.Base import PyObjectId
 from models.Location import LocationModel
 from models.payment.Transaction import TransactionModel
 from models.payment.Payment_breakdown import PaymentBreakdownModel
 
+
 class OrderModel(BaseModel):
-    id: Optional[PyObjectId] = Field(default_factory=PyObjectId, alias="_id")
-    vendor_id: PyObjectId
-    supplier_id: PyObjectId
-    product_id: PyObjectId
+    id: Optional[str] = Field(default=None, alias="_id")
+    vendor_id: str
+    supplier_id: str
+    product_id: str
     qty: int
     total_price: float
     status: Literal["pending", "confirmed", "delivered", "cancelled"]
@@ -25,5 +26,5 @@ class OrderModel(BaseModel):
     payment: Optional[List[PaymentBreakdownModel]] = None
 
     class Config:
-        allow_population_by_field_name = True
-        json_encoders = {PyObjectId: str, datetime: lambda x: x.isoformat()}
+        populate_by_name = True  # For Pydantic v2
+        json_encoders = {datetime: lambda x: x.isoformat()}
