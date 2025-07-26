@@ -33,7 +33,7 @@ class UserModel(BaseModel):
     phone2: Optional[str] = None
     location: Optional[LocationModel] = None
     proof_id: Optional[str] = None
-    role: Literal["vendor", "supplier", "admin"]
+    role: str = "vendor"
 
     class Config:
         allow_population_by_field_name = True

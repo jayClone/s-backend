@@ -2,8 +2,8 @@ from pydantic import BaseModel
 from datetime import datetime, timezone
 from bson import ObjectId
 from api.db import db
-from typing import Optional, List, Dict, Any
 from fastapi import HTTPException
+from typing import Optional, List, Dict, Any
 
 # Role base model for validation
 class RoleBaseModel(BaseModel):
