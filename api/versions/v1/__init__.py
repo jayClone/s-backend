@@ -2,6 +2,7 @@ from fastapi import APIRouter
 from api.versions.v1.mail.root import router as mail_router
 from api.versions.v1.user.auth import router as auth_router
 from api.versions.v1.product import router as product_router
+from api.versions.v1.review import router as review_router
 from fastapi.responses import JSONResponse
 
 router = APIRouter()
@@ -26,3 +27,6 @@ router.include_router(auth_router, prefix="/auth", tags=["API Version 1"])
 
 # https://localhost:10021/api/v1/auth
 router.include_router(product_router, prefix="/product", tags=["API Version 1"])
+
+# https://localhost:10021/api/v1/review
+router.include_router(review_router, prefix="/review", tags=["API Version 1"])
