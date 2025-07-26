@@ -5,5 +5,4 @@ class LocationModel(BaseModel):
     city: str
     state: str
     pincode: str
-    lat: float
-    lng: float
+    country: str
