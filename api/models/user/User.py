@@ -13,19 +13,21 @@ from dotenv import load_dotenv
 load_dotenv()
 @staticmethod
 def get_by_username(username):
-        try:
-            collection = User.get_collection()
-            if collection is None:
-                return None
-            return collection.find_one({"username": username})
-        except HTTPException as http_exc:
-            raise http_exc
-        except Exception as e:
-            print(f"Error retrieving user by username: {e}")
+    try:
+        collection = User.get_collection()
+        print(f"Querying for username: {username}")  # Debug print
+        if collection is None:
             return None
+        user = collection.find_one({"username": username})
+        print(f"Found user: {user}")  # Debug print
+        return user
+    except Exception as e:
+        print(f"Error retrieving user by username: {e}")
+        return None
 
 class UserModel(BaseModel):
     id: str = Field(default_factory=lambda: str(ObjectId()), alias="_id")
+    username: str
     name: str
     email: EmailStr
     password: str
@@ -34,6 +36,8 @@ class UserModel(BaseModel):
     location: Optional[LocationModel] = None
     proof_id: Optional[str] = None
     role: str = "vendor"
+    is_active: bool = True  # <-- Add this line
+    login_count: int = 0  # <-- Add this line
 
     class Config:
         allow_population_by_field_name = True
@@ -52,7 +56,8 @@ class User:
             print(f"Error accessing database: {e}")
             raise HTTPException(status_code=500, detail=f"Error accessing database: {str(e)}")
 
-    def __init__(self, name, email, password, phone1, role, phone2=None, location=None, proof_id=None, _id=None):
+    def __init__(self, username, name, email, password, phone1, role, phone2=None, location=None, proof_id=None, _id=None, login_count=0):
+        self.username = username
         self.name = name
         self.email = email
         self.password = password
@@ -62,6 +67,7 @@ class User:
         self.proof_id = proof_id
         self.role = role
         self._id = _id
+        self.login_count = login_count  # <-- Add this line
 
     @staticmethod
     def hash_password(password):
@@ -106,6 +112,7 @@ class User:
 
             # Validate data using the schema
             user_data = UserModel(
+                username=self.username,
                 name=self.name,
                 email=self.email,
                 password=self.password,
@@ -148,11 +155,12 @@ class User:
     def get_by_username(username):
         try:
             collection = User.get_collection()
+            print(f"Querying for username: {username}")  # Debug print
             if collection is None:
                 return None
-            return collection.find_one({"username": username})
-        except HTTPException as http_exc:
-            raise http_exc
+            user = collection.find_one({"username": username})
+            print(f"Found user: {user}")  # Debug print
+            return user
         except Exception as e:
             print(f"Error retrieving user by username: {e}")
             return None
@@ -217,18 +225,30 @@ class User:
             raise HTTPException(status_code=500, detail=f"Failed to reset password: {str(e)}")
 
     @staticmethod
-    def authenticate(username, password):
+    def authenticate(identifier, password):
         try:
-            user = User.get_by_username(username)
+            # Try username first
+            user = User.get_by_username(identifier)
+            if not user:
+                # Try email if username not found
+                user = User.get_by_email(identifier)
             if not user:
                 raise HTTPException(status_code=401, detail="Invalid username or password")
 
+            # If you use is_active, check it
+            if "is_active" in user and not user["is_active"]:
+                raise HTTPException(status_code=403, detail="User is not active")
+
+            # Verify password
             if not User.verify_password(password, user["password"]):
                 raise HTTPException(status_code=401, detail="Invalid username or password")
 
             # Convert ObjectId to string for JSON serialization
             user["_id"] = str(user["_id"])
-            user["role"] = str(user["role"])
+            # If role is an ObjectId, fetch role name
+            if isinstance(user["role"], ObjectId):
+                role_obj = Role.get_by_id(user["role"])
+                user["role"] = role_obj["name"] if role_obj else "vendor"
 
             return user
 
@@ -291,11 +311,12 @@ class User:
                     detail="Email already exists")
 
             new_user = User(
+                username=username,
                 name=f"{first_name} {last_name}",
                 email=email,
                 password=password,
                 phone1="",  # Provide a default or required value
-                role=default_role["_id"]
+                role=default_role["name"]
             )
 
             new_user.save()
@@ -338,11 +359,17 @@ class User:
 
             # Increment login count and update user
             obj = User(
-                name=user.get("name", ""),
+                username=user["username"],
+                name=user.get("name", ""),  # Use 'name' field or empty string
                 email=user["email"],
                 password=user["password"],
-                phone1=user.get("phone1", ""),
-                role=user["role"]
+                phone1=user.get("phone1", ""),  # Use 'phone1' field or empty string
+                role=user["role"],
+                phone2=user.get("phone2"),
+                location=user.get("location"),
+                proof_id=user.get("proof_id"),
+                _id=user["_id"],
+                login_count=user.get("login_count", 0)
             )
             obj._id = user["_id"]
             obj.increment_login_count()
