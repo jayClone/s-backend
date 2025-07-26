@@ -1,45 +1,46 @@
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import json
 from bson import ObjectId
 from fastapi import HTTPException, Request
-from pydantic import BaseModel, EmailStr, field_validator
-from typing import List, Tuple, Union
+from pydantic import BaseModel, Field, EmailStr
+from typing import Optional, Literal, Tuple, Union
 from api.db import db
 from api.extensions.jwt import create_token, verify_token, extract_token_from_request
 from api.models.user.Role import Role
+from models.Base import PyObjectId
+from models.Location import LocationModel
 import bcrypt
 import os
 from dotenv import load_dotenv
-from datetime import timedelta
 
 load_dotenv()
+@staticmethod
+def get_by_username(username):
+        try:
+            collection = User.get_collection()
+            if collection is None:
+                return None
+            return collection.find_one({"username": username})
+        except HTTPException as http_exc:
+            raise http_exc
+        except Exception as e:
+            print(f"Error retrieving user by username: {e}")
+            return None
 
-# User base model for validation
-class UserBaseModel(BaseModel):
-    username: str
-    first_name: str
-    last_name: str
-    email: List[EmailStr]
+class UserModel(BaseModel):
+    id: Optional[PyObjectId] = Field(default_factory=PyObjectId, alias="_id")
+    name: str
+    email: EmailStr
     password: str
-    role: ObjectId  # This references the _id field from Role collection
-    role_status: bool = True
-    login_count: int = 0
-    is_active: bool = True
-    created_at: datetime = datetime.now(timezone.utc)
-    updated_at: datetime = datetime.now(timezone.utc)
+    phone1: str
+    phone2: Optional[str] = None
+    location: Optional[LocationModel] = None
+    proof_id: Optional[str] = None
+    role: Literal["vendor", "supplier", "admin"]
 
     class Config:
-        arbitrary_types_allowed = True
-        json_encoders = {
-            ObjectId: str,
-            datetime: datetime.isoformat,
-        }
-
-    @field_validator('email')
-    def ensure_email_is_list(cls, v):
-        if isinstance(v, str):
-            return [v]
-        return v
+        allow_population_by_field_name = True
+        json_encoders = {PyObjectId: str}
 
 class User:
     @staticmethod
@@ -54,23 +55,16 @@ class User:
             print(f"Error accessing database: {e}")
             raise HTTPException(status_code=500, detail=f"Error accessing database: {str(e)}")
 
-    def __init__(self, username, first_name, last_name, email, password, role, role_status=True, login_count=0, is_active=True, created_at=None, updated_at=None):
-        self.username = username
-        self.first_name = first_name
-        self.last_name = last_name
-        if isinstance(email, str):
-            self.email = [email]
-        elif isinstance(email, list):
-            self.email = [str(e) for e in email]
-        else:
-            self.email = []
+    def __init__(self, name, email, password, phone1, role, phone2=None, location=None, proof_id=None, _id=None):
+        self.name = name
+        self.email = email
         self.password = password
+        self.phone1 = phone1
+        self.phone2 = phone2
+        self.location = location
+        self.proof_id = proof_id
         self.role = role
-        self.role_status = role_status
-        self.login_count = login_count
-        self.is_active = is_active
-        self.created_at = created_at or datetime.now(timezone.utc)
-        self.updated_at = updated_at or datetime.now(timezone.utc)
+        self._id = _id
 
     @staticmethod
     def hash_password(password):
@@ -114,21 +108,19 @@ class User:
                 raise HTTPException(status_code=500, detail="Database connection error")
 
             # Validate data using the schema
-            user_data = UserBaseModel(
-                username=self.username,
-                first_name=self.first_name,
-                last_name=self.last_name,
+            user_data = UserModel(
+                name=self.name,
                 email=self.email,
                 password=self.password,
+                phone1=self.phone1,
+                phone2=self.phone2,
+                location=self.location,
+                proof_id=self.proof_id,
                 role=self.role,
-                role_status=self.role_status,
-                login_count=self.login_count,
-                is_active=self.is_active,
-                created_at=self.created_at,
-                updated_at=self.updated_at
-            ).model_dump()
+                _id=self._id if hasattr(self, '_id') else None
+            ).model_dump(by_alias=True)
 
-            if hasattr(self, '_id'):
+            if self._id:
                 user_data['_id'] = self._id
                 collection.update_one({"_id": self._id}, {"$set": user_data})
             else:
@@ -144,6 +136,19 @@ class User:
             raise HTTPException(status_code=500, detail=f"Failed to save user: {str(e)}")
 
     @staticmethod
+    def get_by_email(email):
+        try:
+            collection = User.get_collection()
+            if collection is None:
+                return None
+            return collection.find_one({"email": email})
+        except HTTPException as http_exc:
+            raise http_exc
+        except Exception as e:
+            print(f"Error retrieving user by email: {e}")
+            return None
+
+    @staticmethod
     def get_by_username(username):
         try:
             collection = User.get_collection()
@@ -154,19 +159,6 @@ class User:
             raise http_exc
         except Exception as e:
             print(f"Error retrieving user by username: {e}")
-            return None
-
-    @staticmethod
-    def get_by_email(email):
-        try:
-            collection = User.get_collection()
-            if collection is None:
-                return None
-            return collection.find_one({"email": {"$in": [email]}})
-        except HTTPException as http_exc:
-            raise http_exc
-        except Exception as e:
-            print(f"Error retrieving user by email: {e}")
             return None
 
     @staticmethod
@@ -181,28 +173,6 @@ class User:
         except Exception as e:
             print(f"Error retrieving user by ID: {e}")
             return None
-
-    @staticmethod
-    def check_username(username):
-        try:
-            if not username or len(username) < 3:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Username must be at least 3 characters long"
-                )
-            if User.get_by_username(username):
-                raise HTTPException(
-                    status_code=409,
-                    detail="Username already exists"
-                )
-            return True
-        except HTTPException as http_exc:
-            raise http_exc
-        except Exception as e:
-            raise HTTPException(
-                status_code=400,
-                detail=str(e)
-            )
 
     @staticmethod
     def check_email(email):
@@ -325,18 +295,16 @@ class User:
                     detail="Email already exists")
 
             new_user = User(
-                username=username,
-                first_name=first_name,
-                last_name=last_name,
+                name=f"{first_name} {last_name}",
                 email=email,
                 password=password,
-                role=default_role["_id"],
-                is_active=False  # Default inactive
+                phone1="",  # Provide a default or required value
+                role=default_role["_id"]
             )
 
             new_user.save()
             return {
-                "username": new_user.username,
+                "name": new_user.name,
                 "email": new_user.email,
             }
 
@@ -374,17 +342,11 @@ class User:
 
             # Increment login count and update user
             obj = User(
-                username=user["username"],
-                first_name=user["first_name"],
-                last_name=user["last_name"],
+                name=user.get("name", ""),
                 email=user["email"],
                 password=user["password"],
-                role=user["role"],
-                role_status=user.get("role_status", True),
-                login_count=user.get("login_count", 0),
-                is_active=user.get("is_active", True),
-                created_at=user.get("created_at"),
-                updated_at=user.get("updated_at")
+                phone1=user.get("phone1", ""),
+                role=user["role"]
             )
             obj._id = user["_id"]
             obj.increment_login_count()
@@ -542,6 +504,8 @@ class User:
     async def generate_refresh_token_from_request(request: Request) -> Tuple[str, int]:
         """
         Generate a refresh token from a request containing a valid access token
+        
+        # ...existing code...
         
         Args:
             request: FastAPI Request object
