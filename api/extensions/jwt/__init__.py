@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Tuple
 from fastapi import HTTPException, Request
-import jwt
+import jwt as pyjwt  # Make sure PyJWT is installed: pip install PyJWT
 from dotenv import load_dotenv
 import os
 
@@ -45,7 +45,10 @@ def create_token(data: dict, expires_delta: Optional[timedelta] = None) -> Tuple
         exp_timestamp = int(expire.timestamp())
         to_encode.update({"exp": exp_timestamp})
         
-        encoded_jwt = jwt.encode(to_encode, JWT_SECRET, algorithm=JWT_ALGORITHM)
+        encoded_jwt = pyjwt.encode(to_encode, JWT_SECRET, algorithm=JWT_ALGORITHM)
+        # If using PyJWT >= 2.x, encoded_jwt is str. If < 2.x, it may be bytes.
+        if isinstance(encoded_jwt, bytes):
+            encoded_jwt = encoded_jwt.decode("utf-8")
         return encoded_jwt, exp_timestamp
     except HTTPException as http_exc:
         raise http_exc
@@ -63,7 +66,7 @@ def refresh_token(token: str, expires_delta: Optional[timedelta] = None) -> Tupl
         Tuple of (token, expiry_timestamp)
     """
     try:
-        decoded_data = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        decoded_data = pyjwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
         # Remove the 'exp' field to create a new token
         decoded_data.pop("exp", None)
         current_time = datetime.now(timezone.utc)
@@ -78,9 +81,9 @@ def refresh_token(token: str, expires_delta: Optional[timedelta] = None) -> Tupl
         return new_token, expiry_timestamp
     except HTTPException as http_exc:
         raise http_exc
-    except jwt.ExpiredSignatureError:
+    except pyjwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token has expired")
-    except jwt.InvalidTokenError:
+    except pyjwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Invalid token")
     except Exception as e:
         raise HTTPException(
@@ -170,7 +173,7 @@ def verify_token(token: str, required_roles: Optional[list[str]] = None) -> dict
         HTTPException: If token is invalid, expired, or role check fails
     """
     try:
-        decoded_data = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        decoded_data = pyjwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
         
         # Check expiration explicitly (although JWT already checks this internally)
         if "exp" in decoded_data:
@@ -190,9 +193,9 @@ def verify_token(token: str, required_roles: Optional[list[str]] = None) -> dict
         return decoded_data
     except HTTPException as http_exc:
         raise http_exc
-    except jwt.ExpiredSignatureError:
+    except pyjwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token has expired")
-    except jwt.InvalidTokenError:
+    except pyjwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Invalid token")
     except Exception as e:
         raise HTTPException(
