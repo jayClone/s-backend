@@ -106,7 +106,6 @@ class User:
 
             # Validate data using the schema
             user_data = UserModel(
-                id= ObjectId(),
                 name=self.name,
                 email=self.email,
                 password=self.password,
@@ -273,7 +272,7 @@ class User:
     def signup(username: str, first_name: str, last_name: str, email: str, password: str):
         try:
             # Get default role
-            default_role = Role.get_role_by_name("user")
+            default_role = Role.get_role_by_name("vendor")
             if not default_role:
                 raise HTTPException(
                     status_code=404,

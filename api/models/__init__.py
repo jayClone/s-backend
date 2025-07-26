@@ -1,6 +1,8 @@
 from api.db import isMongoDBAvailable
 from fastapi import HTTPException
 
+from api.models.user.Role import Role
+
 def init_models():
     """
     Initialize default data for the application.
@@ -13,7 +15,9 @@ def init_models():
 
     try:
         print("Initializing Models...")
-
+        roles_result = Role.create_default_roles()
+        if roles_result is None:
+            raise HTTPException(status_code=500, detail="Failed to create default roles. Skipping user creation.")
     except HTTPException as http_exc:
         raise http_exc
     except Exception as e:

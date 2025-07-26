@@ -86,11 +86,16 @@ class Role:
                     "permissions": ["*"]
                 },
                 {
-                    "name": "user", 
+                    "name": "supplier", 
                     "priority": -1, 
                     "permissions": ["read"]
+                },
+                {
+                    "name": "vendor",
+                    "priority": 1,
+                    "permissions": ["read", "write", "order"]
                 }
-            ]
+                ]
 
             created_roles = []
             for role_data in default_roles:
