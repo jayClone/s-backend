@@ -1,8 +1,8 @@
 from pydantic import BaseModel, Field
 from typing import Optional, List, Literal
 from datetime import datetime
-from models.payment.Transaction import TransactionModel
-from models.payment.Payment_breakdown import PaymentBreakdownModel
+from api.models.payment.Transaction import TransactionModel
+from api.models.payment.Payment_breakdown import PaymentBreakdownModel
 
 class PaymentHistoryModel(BaseModel):
     id: Optional[str] = Field(default=None, alias="_id")

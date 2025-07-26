@@ -1,7 +1,7 @@
 from datetime import datetime, timezone, timedelta
 from bson import ObjectId
 from fastapi import HTTPException, Request
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 from typing import Optional, Literal, Tuple
 from api.db import db
 from api.extensions.jwt import create_token, verify_token, extract_token_from_request
@@ -25,7 +25,7 @@ def get_by_username(username):
             return None
 
 class UserModel(BaseModel):
-    id: ObjectId
+    id: str = Field(default_factory=lambda: str(ObjectId()), alias="_id")
     name: str
     email: EmailStr
     password: str

@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field
 from typing import Optional
-from models.Location import LocationModel
+from api.models.Location import LocationModel
 
 class ProductModel(BaseModel):
     id: Optional[str] = Field(default=None, alias="_id")
