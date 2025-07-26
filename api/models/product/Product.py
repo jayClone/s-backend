@@ -202,4 +202,19 @@ class ProductModel(BaseModel):
         except Exception as e:
             print(f"Error deleting product: {e}")
             raise HTTPException(status_code=500, detail=f"Product deletion failed: {str(e)}")
+        
+# get product by id
+    @staticmethod
+    def get_product_by_id(product_id: str):
+        """Get product details by product_id"""
+        try:
+            product = db["products"].find_one({"_id": ObjectId(product_id)})
+            if not product:
+                raise HTTPException(status_code=404, detail="Product not found.")
+            if "_id" in product and isinstance(product["_id"], ObjectId):
+                product["_id"] = str(product["_id"])
+            return product
+        except Exception as e:
+            print(f"Error fetching product: {e}")
+            raise HTTPException(status_code=500, detail=f"Failed to fetch product: {str(e)}")
 

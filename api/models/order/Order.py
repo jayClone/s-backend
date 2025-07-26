@@ -2,9 +2,12 @@ from bson import ObjectId
 from pydantic import BaseModel, Field
 from typing import Optional, List, Literal
 from datetime import datetime
+from fastapi import HTTPException
+
 from api.models.Location import LocationModel
 from api.models.payment.Transaction import TransactionModel
-from api.models.payment.Payment_breakdown import PaymentBreakdownModel
+from api.models.payment.Payment import PaymentModel
+from api.db import db  # Ensure this import is correct
 
 
 class OrderModel(BaseModel):
@@ -23,8 +26,89 @@ class OrderModel(BaseModel):
 
     location: Optional[LocationModel] = None
     transaction: Optional[List[TransactionModel]] = None
-    payment: Optional[List[PaymentBreakdownModel]] = None
+    payment: Optional[List[PaymentModel]] = None
 
     class Config:
         populate_by_name = True  # For Pydantic v2
         json_encoders = {datetime: lambda x: x.isoformat()}
+
+
+class Order:
+    @staticmethod
+    def create_booking(order_data: dict):
+        """Create a new booking"""
+        try:
+            order_data["order_date"] = datetime.utcnow()
+            order_data["status"] = "pending"
+            result = db["orders"].insert_one(order_data)
+            order_data["_id"] = str(result.inserted_id)
+            return order_data
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to create booking: {str(e)}")
+
+    @staticmethod
+    def list_bookings(vendor_id: Optional[str] = None, supplier_id: Optional[str] = None):
+        """List all bookings, optionally filter by vendor or supplier"""
+        try:
+            query = {}
+            if vendor_id:
+                query["vendor_id"] = vendor_id
+            if supplier_id:
+                query["supplier_id"] = supplier_id
+            bookings = list(db["orders"].find(query))
+            for booking in bookings:
+                booking["_id"] = str(booking["_id"])
+            return bookings
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to fetch bookings: {str(e)}")
+
+    @staticmethod
+    def get_booking_by_id(booking_id: str):
+        """Get booking details by ID"""
+        try:
+            booking = db["orders"].find_one({"_id": ObjectId(booking_id)})
+            if not booking:
+                raise HTTPException(status_code=404, detail="Booking not found")
+            booking["_id"] = str(booking["_id"])
+            return booking
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to fetch booking: {str(e)}")
+
+    @staticmethod
+    def update_booking_status(booking_id: str, status: str):
+        """Update booking status"""
+        try:
+            result = db["orders"].update_one(
+                {"_id": ObjectId(booking_id)},
+                {"$set": {"status": status}}
+            )
+            if result.matched_count == 0:
+                raise HTTPException(status_code=404, detail="Booking not found")
+            return Order.get_booking_by_id(booking_id)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to update booking: {str(e)}")
+
+    @staticmethod
+    def update_booking(booking_id: str, update_data: dict):
+        """Update booking details (not just status)"""
+        try:
+            result = db["orders"].update_one(
+                {"_id": ObjectId(booking_id)},
+                {"$set": update_data}
+            )
+            if result.matched_count == 0:
+                raise HTTPException(status_code=404, detail="Booking not found")
+            return Order.get_booking_by_id(booking_id)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to update booking: {str(e)}")
+
+    @staticmethod
+    def delete_booking(booking_id: str):
+        """Cancel/Delete booking"""
+        try:
+            result = db["orders"].delete_one({"_id": ObjectId(booking_id)})
+            if result.deleted_count == 0:
+                raise HTTPException(status_code=404, detail="Booking not found")
+            return {"message": "Booking deleted"}
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to delete booking: {str(e)}")

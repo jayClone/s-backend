@@ -192,3 +192,120 @@ class User:
             return create_token(payload)
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Token generation failed: {str(e)}")
+        
+    @staticmethod
+    def list_users():
+        """List all users (admin only)"""
+        try:
+            collection = User.get_collection()
+            users = list(collection.find({}))
+            for user in users:
+                user["_id"] = str(user["_id"])
+            return users
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Error listing users: {str(e)}")
+
+    @staticmethod
+    def get_user_by_id(user_id: str):
+        """Get user by ID"""
+        try:
+            user = User.get_by_id(user_id)
+            if not user:
+                raise HTTPException(status_code=404, detail="User not found")
+            user["_id"] = str(user["_id"])
+            return user
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Error retrieving user: {str(e)}")
+
+    @staticmethod
+    def update_user(user_id: str, update_data: dict):
+        """Update user fields (name, phone, etc.)"""
+        try:
+            collection = User.get_collection()
+            allowed_fields = {"name", "phone1", "phone2", "email"}
+            update_fields = {k: v for k, v in update_data.items() if k in allowed_fields}
+            if not update_fields:
+                raise HTTPException(status_code=400, detail="No valid fields to update")
+            result = collection.update_one(
+                {"_id": ObjectId(user_id)},
+                {"$set": update_fields}
+            )
+            if result.matched_count == 0:
+                raise HTTPException(status_code=404, detail="User not found")
+            return User.get_user_by_id(user_id)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Error updating user: {str(e)}")
+
+    @staticmethod
+    def delete_user(user_id: str):
+        """Delete user by ID"""
+        try:
+            collection = User.get_collection()
+            result = collection.delete_one({"_id": ObjectId(user_id)})
+            if result.deleted_count == 0:
+                raise HTTPException(status_code=404, detail="User not found")
+            return {"message": "User deleted"}
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Error deleting user: {str(e)}")
+
+    @staticmethod
+    def get_locations(user_id: str):
+        """Get all locations for a user"""
+        try:
+            collection = User.get_collection()
+            user = collection.find_one({"_id": ObjectId(user_id)})
+            if not user:
+                raise HTTPException(status_code=404, detail="User not found")
+            locations = user.get("locations", [])
+            for loc in locations:
+                loc["id"] = str(loc.get("id", ""))
+            return locations
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Error retrieving locations: {str(e)}")
+
+    @staticmethod
+    def add_location(user_id: str, location_data: dict):
+        """Add a new location for a user"""
+        from bson import ObjectId
+        try:
+            collection = User.get_collection()
+            location_data["id"] = str(ObjectId())
+            result = collection.update_one(
+                {"_id": ObjectId(user_id)},
+                {"$push": {"locations": location_data}}
+            )
+            if result.matched_count == 0:
+                raise HTTPException(status_code=404, detail="User not found")
+            return location_data
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Error adding location: {str(e)}")
+
+    @staticmethod
+    def update_location(user_id: str, loc_id: str, update_data: dict):
+        """Update a specific location for a user"""
+        try:
+            collection = User.get_collection()
+            result = collection.update_one(
+                {"_id": ObjectId(user_id), "locations.id": loc_id},
+                {"$set": {f"locations.$.{k}": v for k, v in update_data.items()}}
+            )
+            if result.matched_count == 0:
+                raise HTTPException(status_code=404, detail="Location not found")
+            return User.get_locations(user_id)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Error updating location: {str(e)}")
+
+    @staticmethod
+    def delete_location(user_id: str, loc_id: str):
+        """Delete a specific location for a user"""
+        try:
+            collection = User.get_collection()
+            result = collection.update_one(
+                {"_id": ObjectId(user_id)},
+                {"$pull": {"locations": {"id": loc_id}}}
+            )
+            if result.matched_count == 0:
+                raise HTTPException(status_code=404, detail="Location not found")
+            return {"message": "Location deleted"}
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Error deleting location: {str(e)}")
