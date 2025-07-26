@@ -2,6 +2,7 @@ from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse
 from json import JSONDecodeError
 from api.models.user.User import User
+from api.models.user.Role import Role
 
 async def signup(request: Request):
     """
@@ -26,23 +27,27 @@ async def signup(request: Request):
             raise HTTPException(status_code=409, detail="Username already exists")
         User.check_email(data["email"])
 
-        user = User.signup(
-            username=data["username"],
-            first_name=data["first_name"],
-            last_name=data["last_name"],
+        role_name = data.get("role", "vendor")  # default to vendor if not provided
+        role_obj = Role.get_role_by_name(role_name)
+        if not role_obj:
+            raise HTTPException(status_code=404, detail="Role not found")
+
+        user = User(
+            name=f"{data['first_name']} {data['last_name']}",
             email=data["email"],
             password=data["password"],
+            phone1=data.get("phone1", ""),
+            role=role_obj["name"]  # store ObjectId reference
         )
-
-        print(f"User created: {user}")
-
-        if user is None:
-            raise HTTPException(status_code=500, detail="Failed to create user")
-
+        result = user.save()
         return JSONResponse(
             content={
                 "message": "User created successfully",
-                "data": user  
+                "data": {
+                    "name": user.name,
+                    "email": user.email,
+                    "role": user.role,
+                }
             },
             status_code=201
         )
@@ -92,3 +97,7 @@ async def signin(request: Request):
         raise http_exc
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Login Failed: {str(e)}")
+
+async def get_roles_for_frontend():
+    roles = Role.get_all_roles()
+    return JSONResponse(content={"roles": roles}, status_code=200)
