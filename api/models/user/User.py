@@ -123,16 +123,20 @@ class User:
             raise HTTPException(status_code=500, detail=f"Authentication failed: {str(e)}")
 
     @staticmethod
-    def signup(username: str, first_name: str, last_name: str, email: str, password: str):
+    def signup(username: str, first_name: str, last_name: str, email: str, password: str, role: str = "vendor"):
         try:
+            print(f"DEBUG: Signup called with role: {role}")  # Debug line
+            
             # Normalize and validate
             normalized_username = User.normalize_identifier(username)
             normalized_email = User.normalize_identifier(email)
             
-            # Get default role
-            default_role = Role.get_role_by_name("vendor")
-            if not default_role:
-                raise HTTPException(status_code=500, detail="Default role not configured")
+            # Get the specified role
+            role_obj = Role.get_role_by_name(role)
+            print(f"DEBUG: Role object found: {role_obj}")  # Debug line
+            
+            if not role_obj:
+                raise HTTPException(status_code=400, detail=f"Role '{role}' not found. Available roles: admin, supplier, vendor")
 
             # Check for existing user
             if User.get_by_username(normalized_username):
@@ -150,7 +154,7 @@ class User:
                 "email_lower": normalized_email,
                 "password": User.hash_password(password),
                 "phone1": "",
-                "role": default_role["name"],
+                "role": role,  # Use the role string directly instead of role_obj["name"]
                 "is_active": True,
                 "login_count": 0,
                 "created_at": datetime.now(timezone.utc),
@@ -163,7 +167,8 @@ class User:
             return {
                 "id": str(result.inserted_id),
                 "name": new_user["name"],
-                "email": new_user["email"]
+                "email": new_user["email"],
+                "role": new_user["role"]
             }
 
         except HTTPException:

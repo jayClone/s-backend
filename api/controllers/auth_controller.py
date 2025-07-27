@@ -3,10 +3,12 @@ from fastapi.responses import JSONResponse
 from json import JSONDecodeError
 from api import db
 from api.models.user.User import User
+from api.models.user.Role import Role
 
 async def signup(request: Request):
     try:
         data = await request.json()
+        print(f"DEBUG: Request data received: {data}")  # Debug line
     except JSONDecodeError:
         raise HTTPException(status_code=400, detail="Request body cannot be empty")
 
@@ -15,14 +17,24 @@ async def signup(request: Request):
     if missing:
         raise HTTPException(status_code=400, detail=f"Missing fields: {', '.join(missing)}")
 
+    # Get role from request, default to "vendor"
+    role = data.get("role", "vendor")
+    print(f"DEBUG: Role extracted from request: {role}")  # Debug line
+    
+    # Validate that the role exists
+    if not Role.get_role_by_name(role):
+        raise HTTPException(status_code=400, detail=f"Invalid role: {role}")
+
     try:
         result = User.signup(
             username=data["username"],
             first_name=data["first_name"],
             last_name=data["last_name"],
             email=data["email"],
-            password=data["password"]
+            password=data["password"],
+            role=role  # Pass the role parameter
         )
+        print(f"DEBUG: User.signup result: {result}")  # Debug line
         return JSONResponse(
             content={"message": "User created", "data": result},
             status_code=201
