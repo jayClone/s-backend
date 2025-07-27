@@ -56,12 +56,30 @@ class Order:
     def create_booking(order_data: dict):
         """Create a new booking"""
         try:
+            print(f"DEBUG: Order.create_booking called with: {order_data}")
+            if db is None:
+                print("DEBUG: Database connection is None!")
+                raise HTTPException(status_code=500, detail="Database connection not initialized")
             order_data["order_date"] = datetime.utcnow()
             order_data["status"] = "pending"
+            # Validate required fields
+            required_fields = ["vendor_id", "supplier_id", "product_id", "qty", "total_price"]
+            for field in required_fields:
+                if field not in order_data:
+                    print(f"DEBUG: Missing field: {field}")
+                    raise HTTPException(status_code=400, detail=f"Missing field: {field}")
+            print(f"DEBUG: All required fields present. Types: {[type(order_data[f]) for f in required_fields]}")
+            print(f"DEBUG: About to insert into DB: {order_data}")
             result = db["orders"].insert_one(order_data)
+            print(f"DEBUG: Inserted booking with _id: {result.inserted_id}")
             order_data["_id"] = str(result.inserted_id)
-            return serialize_for_json(order_data)
+            serialized = serialize_for_json(order_data)
+            print(f"DEBUG: Serialized booking: {serialized}")
+            return serialized
         except Exception as e:
+            import traceback
+            print(f"DEBUG: Exception in create_booking: {e}")
+            print(f"DEBUG: Traceback: {traceback.format_exc()}")
             raise HTTPException(status_code=500, detail=f"Failed to create booking: {str(e)}")
 
     @staticmethod
