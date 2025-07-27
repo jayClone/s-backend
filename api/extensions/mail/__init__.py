@@ -21,11 +21,22 @@ class MAIL:
 
     @staticmethod
     def _create_server_connection():
+        # Validate required environment variables
+        if not MAIL.MAIL_SERVER:
+            raise RuntimeError("MAIL_SERVER is missing in .env file.")
+        if not MAIL.MAIL_PORT:
+            raise RuntimeError("MAIL_PORT is missing in .env file.")
+        if not MAIL.MAIL_USERNAME:
+            raise RuntimeError("MAIL_USERNAME is missing in .env file.")
+        if not MAIL.MAIL_PASSWORD:
+            raise RuntimeError("MAIL_PASSWORD is missing in .env file.")
+
+        port = int(MAIL.MAIL_PORT)
         server = None
         if MAIL.MAIL_USE_SSL:
-            server = smtplib.SMTP_SSL(MAIL.MAIL_SERVER, int( MAIL.MAIL_PORT))
+            server = smtplib.SMTP_SSL(MAIL.MAIL_SERVER, port)
         else:
-            server = smtplib.SMTP(MAIL.MAIL_SERVER, int(MAIL.MAIL_PORT))
+            server = smtplib.SMTP(MAIL.MAIL_SERVER, port)
             if MAIL.MAIL_USE_TLS:
                 server.starttls()
         server.login(MAIL.MAIL_USERNAME, MAIL.MAIL_PASSWORD)

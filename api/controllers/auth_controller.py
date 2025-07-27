@@ -1,6 +1,7 @@
 from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse
 from json import JSONDecodeError
+from api import db
 from api.models.user.User import User
 
 async def signup(request: Request):
@@ -65,3 +66,26 @@ async def signin(request: Request):
         raise e
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Login failed: {str(e)}")
+
+async def reset_password(request: Request):
+    try:
+        data = await request.json()
+        email = data.get("email")
+        new_password = data.get("new_password")
+        if not email or not new_password:
+            raise HTTPException(status_code=400, detail="Email and new password are required")
+
+        user = User.get_by_email(email)
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        # Hash the new password (assuming User.hash_password exists)
+        hashed = User.hash_password(new_password)
+        users_collection = getattr(db, "users", None)
+        if users_collection is None:
+            raise HTTPException(status_code=500, detail="Users collection not found in db module")
+        users_collection.update_one({"email": email}, {"$set": {"password": hashed}})
+
+        return JSONResponse(content={"message": "Password reset successful"}, status_code=200)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to reset password: {str(e)}")
