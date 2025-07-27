@@ -94,19 +94,15 @@ def init_db():
 
     if DB_TYPE in ['mongodb', 'both']:
         try:
-            MONGO_SERVER_URL = os.getenv('MONGO_SERVER_URL', 'mongodb://mongo:27017')
-            MONGO_DB_NAME = os.getenv('MONGO_DB_NAME', 'template')
+            MONGO_SERVER_URL = os.getenv('MONGO_SERVER_URL')
+            MONGO_DB_NAME = os.getenv('MONGO_DB_NAME')
 
-            # Initialize MongoDB connection with explicit TLS settings
-            client = MongoClient(
-                MONGO_SERVER_URL,
-                ssl=True,
-                ssl_cert_reqs=ssl.CERT_NONE,
-                ssl_context=ssl.SSLContext(ssl.PROTOCOL_TLSv1_2)
-            )
-            # Test the connection
+            if not MONGO_DB_NAME:
+                raise ValueError("MONGO_DB_NAME environment variable is not set.")
+
+            # Use default MongoClient for Atlas SRV URI
+            client = MongoClient(MONGO_SERVER_URL)
             client.admin.command('ping')
-
             db = client[MONGO_DB_NAME]
 
             isMongoDBAvailable = True
