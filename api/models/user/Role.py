@@ -88,7 +88,7 @@ class Role:
                 {
                     "name": "supplier", 
                     "priority": -1, 
-                    "permissions": ["read"]
+                    "permissions": ["read", "write", "manage_products"]
                 },
                 {
                     "name": "vendor",
