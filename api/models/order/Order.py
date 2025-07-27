@@ -4,9 +4,10 @@ from typing import Optional, List, Literal
 from datetime import datetime
 from fastapi import HTTPException
 
-from api.models.Location import LocationModel
-from api.models.payment.Transaction import TransactionModel
-from api.models.payment.Payment import PaymentModel
+# from api.models.Location import LocationModel
+# from api.models.payment.Transaction import TransactionModel
+# from api.models.payment.Payment import PaymentModel
+# from api.models.user.User import UserModel
 from api.db import db  # Ensure this import is correct
 
 
@@ -20,13 +21,13 @@ class OrderModel(BaseModel):
     status: Literal["pending", "confirmed", "delivered", "cancelled"]
     order_date: datetime = Field(default_factory=datetime.utcnow)
 
-    payment_status: Optional[Literal["pending", "completed", "failed"]] = "pending"
-    payment_method: Optional[Literal["UPI", "COD", "Wallet", "Card"]] = None
-    payment_date: Optional[datetime] = None
+    # payment_status: Optional[Literal["pending", "completed", "failed"]] = "pending"
+    # payment_method: Optional[Literal["UPI", "COD", "Wallet", "Card"]] = None
+    # payment_date: Optional[datetime] = None
 
-    location: Optional[LocationModel] = None
-    transaction: Optional[List[TransactionModel]] = None
-    payment: Optional[List[PaymentModel]] = None
+    # location: Optional[LocationModel] = None
+    # transaction: Optional[List[TransactionModel]] = None
+    # payment: Optional[List[PaymentModel]] = None
 
     class Config:
         populate_by_name = True  # For Pydantic v2
@@ -34,6 +35,22 @@ class OrderModel(BaseModel):
 
 
 class Order:
+
+
+    @staticmethod
+    def get_booking_by_id(booking_id: str):
+        """Get a booking by its ID"""
+        try:
+            booking = db["orders"].find_one({"_id": ObjectId(booking_id)})
+            if not booking:
+                raise HTTPException(status_code=404, detail="Booking not found")
+            booking["_id"] = str(booking["_id"])
+            if "order_date" in booking and isinstance(booking["order_date"], datetime):
+                booking["order_date"] = booking["order_date"].isoformat()
+            return booking
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to fetch booking: {str(e)}")
+        
     @staticmethod
     def create_booking(order_data: dict):
         """Create a new booking"""
@@ -62,17 +79,35 @@ class Order:
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Failed to fetch bookings: {str(e)}")
 
+    # get all booking by vendor
     @staticmethod
-    def get_booking_by_id(booking_id: str):
-        """Get booking details by ID"""
+    def get_bookings_by_vendor(vendor_id: str):
+        """Get all bookings for a particular vendor"""
         try:
-            booking = db["orders"].find_one({"_id": ObjectId(booking_id)})
-            if not booking:
-                raise HTTPException(status_code=404, detail="Booking not found")
-            booking["_id"] = str(booking["_id"])
-            return booking
+            bookings = list(db["orders"].find({"vendor_id": vendor_id}))
+            for booking in bookings:
+                booking["_id"] = str(booking["_id"])
+                if "order_date" in booking and isinstance(booking["order_date"], datetime):
+                    booking["order_date"] = booking["order_date"].isoformat()
+            return bookings
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Failed to fetch booking: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Failed to fetch bookings: {str(e)}")
+        
+
+    # get all booking by supplier 
+    @staticmethod
+    def get_bookings_by_supplier(supplier_id: str):
+        """Get all bookings for a particular supplier"""
+        try:
+            bookings = list(db["orders"].find({"supplier_id": supplier_id}))
+            for booking in bookings:
+                booking["_id"] = str(booking["_id"])
+                if "order_date" in booking and isinstance(booking["order_date"], datetime):
+                    booking["order_date"] = booking["order_date"].isoformat()
+            return bookings
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to fetch bookings: {str(e)}")    
+
 
     @staticmethod
     def update_booking_status(booking_id: str, status: str):
