@@ -1,5 +1,6 @@
 import os
 from pymongo import MongoClient
+import ssl
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from dotenv import load_dotenv
@@ -96,9 +97,13 @@ def init_db():
             MONGO_SERVER_URL = os.getenv('MONGO_SERVER_URL', 'mongodb://mongo:27017')
             MONGO_DB_NAME = os.getenv('MONGO_DB_NAME', 'template')
 
-            # Initialize MongoDB connection
-            client = MongoClient(MONGO_SERVER_URL)
-            
+            # Initialize MongoDB connection with explicit TLS settings
+            client = MongoClient(
+                MONGO_SERVER_URL,
+                ssl=True,
+                ssl_cert_reqs=ssl.CERT_NONE,
+                ssl_context=ssl.SSLContext(ssl.PROTOCOL_TLSv1_2)
+            )
             # Test the connection
             client.admin.command('ping')
 
