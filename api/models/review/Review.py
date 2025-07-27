@@ -4,6 +4,8 @@ from datetime import datetime
 from fastapi import HTTPException
 from bson import ObjectId
 from api.db import db  # Assuming you have a database module to handle MongoDB connections
+from api.extensions.helper.json_serializer import serialize_for_json
+
 class ReviewModel(BaseModel):
     id: Optional[str] = Field(default=None, alias="_id")
     vendor_id: str
@@ -54,7 +56,7 @@ class ReviewModel(BaseModel):
                 review_dict["_id"] = str(review_dict["_id"])
             if "created_at" in review_dict and isinstance(review_dict["created_at"], datetime):
                 review_dict["created_at"] = review_dict["created_at"].isoformat()
-            return review_dict
+            return serialize_for_json(review_dict)
         except HTTPException as http_exc:
             raise http_exc
         except Exception as e:
@@ -64,23 +66,21 @@ class ReviewModel(BaseModel):
     # list reviews by vendor_id and supplier_id
     @staticmethod
     def list_reviews(vendor_id: Optional[str] = None, supplier_id: Optional[str] = None):
+        """List all reviews, optionally filter by vendor or supplier"""
         try:
             query = {}
             if vendor_id:
                 query["vendor_id"] = vendor_id
             if supplier_id:
                 query["supplier_id"] = supplier_id
-
-            reviews_cursor = db["reviews"].find(query)
-            reviews = []
-            for review in reviews_cursor:
-                if "_id" in review:
-                    review["_id"] = str(review["_id"])
-                if "created_at" in review and isinstance(review["created_at"], datetime):
-                    review["created_at"] = review["created_at"].isoformat()
-                reviews.append(review)
-            return reviews
+            
+            reviews = list(db["reviews"].find(query))
+            # Serialize all reviews for JSON
+            serialized_reviews = []
+            for review in reviews:
+                serialized_review = serialize_for_json(review)
+                serialized_reviews.append(serialized_review)
+            return serialized_reviews
         except Exception as e:
-            print(f"Error listing reviews: {e}")
-            raise HTTPException(status_code=500, detail=f"Failed to list reviews: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Failed to fetch reviews: {str(e)}")
         

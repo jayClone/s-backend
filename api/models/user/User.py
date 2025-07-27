@@ -3,6 +3,7 @@ from bson import ObjectId
 from fastapi import HTTPException
 from pydantic import BaseModel, EmailStr, Field
 from typing import Optional, List, Tuple
+from api.extensions.helper.json_serializer import serialize_for_json, clean_user_data
 from api.db import db
 from api.extensions.jwt.__init__ import create_token  # Ensure this import is correct
 from api.models.user.Role import Role
@@ -25,6 +26,17 @@ class UserModel(BaseModel):
 
     class Config:
         allow_population_by_field_name = True
+        json_encoders = {ObjectId: str}
+
+class UpdateProfileModel(BaseModel):
+    name: Optional[str] = None
+    email: Optional[EmailStr] = None
+    phone1: Optional[str] = None
+    phone2: Optional[str] = None
+    current_password: Optional[str] = None
+    new_password: Optional[str] = None
+    
+    class Config:
         json_encoders = {ObjectId: str}
 
 class User:
@@ -116,7 +128,8 @@ class User:
                 if not Role.get_role_by_name(user["role"]):
                     user["role"] = "vendor"
 
-            return user
+            # Serialize for JSON
+            return serialize_for_json(user)
         except HTTPException:
             raise
         except Exception as e:
@@ -204,9 +217,12 @@ class User:
         try:
             collection = User.get_collection()
             users = list(collection.find({}))
+            # Serialize all users for JSON
+            serialized_users = []
             for user in users:
-                user["_id"] = str(user["_id"])
-            return users
+                serialized_user = clean_user_data(user)
+                serialized_users.append(serialized_user)
+            return serialized_users
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Error listing users: {str(e)}")
 
@@ -217,8 +233,7 @@ class User:
             user = User.get_by_id(user_id)
             if not user:
                 raise HTTPException(status_code=404, detail="User not found")
-            user["_id"] = str(user["_id"])
-            return user
+            return clean_user_data(user)
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Error retrieving user: {str(e)}")
 
@@ -240,6 +255,79 @@ class User:
             return User.get_user_by_id(user_id)
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Error updating user: {str(e)}")
+
+    @staticmethod
+    def update_profile(user_id: str, update_data: dict):
+        """Update user profile with enhanced validation and password change support"""
+        try:
+            collection = User.get_collection()
+            
+            # Get current user
+            current_user = User.get_by_id(user_id)
+            if not current_user:
+                raise HTTPException(status_code=404, detail="User not found")
+            
+            update_fields = {}
+            
+            # Handle name update
+            if "name" in update_data and update_data["name"]:
+                update_fields["name"] = update_data["name"]
+            
+            # Handle phone updates
+            if "phone1" in update_data:
+                update_fields["phone1"] = update_data["phone1"]
+            if "phone2" in update_data:
+                update_fields["phone2"] = update_data["phone2"]
+            
+            # Handle email update with validation
+            if "email" in update_data and update_data["email"]:
+                new_email = update_data["email"].lower().strip()
+                if new_email != current_user.get("email_lower", ""):
+                    # Check if email already exists
+                    existing_user = User.get_by_email(new_email)
+                    if existing_user and str(existing_user["_id"]) != user_id:
+                        raise HTTPException(status_code=409, detail="Email already exists")
+                    update_fields["email"] = update_data["email"]
+                    update_fields["email_lower"] = new_email
+            
+            # Handle password change
+            if "current_password" in update_data and "new_password" in update_data:
+                if not update_data["current_password"] or not update_data["new_password"]:
+                    raise HTTPException(status_code=400, detail="Both current and new password are required")
+                
+                # Verify current password
+                if not User.verify_password(update_data["current_password"], current_user["password"]):
+                    raise HTTPException(status_code=401, detail="Current password is incorrect")
+                
+                # Hash new password
+                update_fields["password"] = User.hash_password(update_data["new_password"])
+            
+            # Update timestamp
+            update_fields["updated_at"] = datetime.now(timezone.utc)
+            
+            if not update_fields:
+                raise HTTPException(status_code=400, detail="No valid fields to update")
+            
+            # Perform update
+            result = collection.update_one(
+                {"_id": ObjectId(user_id)},
+                {"$set": update_fields}
+            )
+            
+            if result.matched_count == 0:
+                raise HTTPException(status_code=404, detail="User not found")
+            
+            # Return updated user (excluding password)
+            updated_user = User.get_by_id(user_id)
+            if not updated_user:
+                raise HTTPException(status_code=404, detail="User not found")
+            return clean_user_data(updated_user)
+
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Error updating profile: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Error updating profile: {str(e)}")
 
     @staticmethod
     def delete_user(user_id: str):

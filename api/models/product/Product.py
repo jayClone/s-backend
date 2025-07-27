@@ -4,6 +4,7 @@ from fastapi import HTTPException
 from bson import ObjectId
 from api.models.Location import LocationModel
 from api.db import db
+from api.extensions.helper.json_serializer import serialize_for_json
 
 class ProductModel(BaseModel):
     id: Optional[str] = Field(default=None, alias="_id")
@@ -56,36 +57,93 @@ class ProductModel(BaseModel):
         image_url: Optional[str] = None,
     ):
         try:
+            print(f"DEBUG: create_product called with: name={name}, category={category}, supplier_id={supplier_id}")
+            
             # Validate required fields
             if not all([name, category, price_per_unit, unit, available_quantity, supplier_id]):
                 raise HTTPException(status_code=400, detail="Missing required product fields.")
 
+            # Handle location conversion if it's a dict
+            location_obj = None
+            if location:
+                print(f"DEBUG: Processing location: {location}")
+                if isinstance(location, dict):
+                    # Convert 'zip' to 'pincode' if present
+                    if "zip" in location:
+                        location["pincode"] = location.pop("zip")
+                    # Add default country if not present
+                    if "country" not in location:
+                        location["country"] = "USA"
+                    print(f"DEBUG: Creating LocationModel with: {location}")
+                    try:
+                        location_obj = LocationModel(**location)
+                        print(f"DEBUG: LocationModel created successfully")
+                    except Exception as loc_error:
+                        print(f"DEBUG: Error creating LocationModel: {loc_error}")
+                        raise HTTPException(status_code=400, detail=f"Invalid location data: {str(loc_error)}")
+                elif isinstance(location, LocationModel):
+                    location_obj = location
+
             # Create product instance
-            product = ProductModel(
-                name=name,
-                category=category,
-                price_per_unit=price_per_unit,
-                unit=unit,
-                available_quantity=available_quantity,
-                supplier_id=supplier_id,
-                location=location,
-                image_url=image_url
-            )
+            print(f"DEBUG: Creating ProductModel instance")
+            try:
+                product = ProductModel(
+                    name=name,
+                    category=category,
+                    price_per_unit=price_per_unit,
+                    unit=unit,
+                    available_quantity=available_quantity,
+                    supplier_id=supplier_id,
+                    location=location_obj,
+                    image_url=image_url
+                )
+                print(f"DEBUG: ProductModel instance created successfully")
+            except Exception as product_error:
+                print(f"DEBUG: Error creating ProductModel instance: {product_error}")
+                raise HTTPException(status_code=400, detail=f"Invalid product data: {str(product_error)}")
 
             # Prepare dict for MongoDB, remove _id if None
+            print(f"DEBUG: Preparing product dict for MongoDB")
             product_dict = product.model_dump(by_alias=True)
             if product_dict.get("_id") is None:
                 product_dict.pop("_id")
+            print(f"DEBUG: Product dict prepared: {product_dict}")
 
             # Save to DB
-            db["products"].insert_one(product_dict)
-
-            return product
+            print(f"DEBUG: Saving to database")
+            try:
+                result = db["products"].insert_one(product_dict)
+                print(f"DEBUG: Database insert successful, inserted_id: {result.inserted_id}")
+            except Exception as db_error:
+                print(f"DEBUG: Database insert error: {db_error}")
+                raise HTTPException(status_code=500, detail=f"Database error: {str(db_error)}")
+            
+            # Get the created product from database with the actual _id
+            print(f"DEBUG: Retrieving created product from database")
+            try:
+                created_product = db["products"].find_one({"_id": result.inserted_id})
+                print(f"DEBUG: Retrieved product: {created_product}")
+            except Exception as retrieve_error:
+                print(f"DEBUG: Error retrieving created product: {retrieve_error}")
+                raise HTTPException(status_code=500, detail=f"Error retrieving created product: {str(retrieve_error)}")
+            
+            # Serialize for JSON response
+            print(f"DEBUG: Serializing product for JSON")
+            try:
+                serialized_product = serialize_for_json(created_product)
+                print(f"DEBUG: Product serialized successfully")
+                return serialized_product
+            except Exception as serialize_error:
+                print(f"DEBUG: Error serializing product: {serialize_error}")
+                raise HTTPException(status_code=500, detail=f"Error serializing product: {str(serialize_error)}")
 
         except HTTPException as http_exc:
+            print(f"DEBUG: HTTPException in create_product: {http_exc}")
             raise http_exc
         except Exception as e:
-            print(f"Error creating product: {e}")
+            print(f"DEBUG: Unexpected error in create_product: {e}")
+            import traceback
+            print(f"DEBUG: Full traceback: {traceback.format_exc()}")
             raise HTTPException(status_code=500, detail=f"Product creation failed: {str(e)}")
 
 # update product
@@ -102,119 +160,102 @@ class ProductModel(BaseModel):
         image_url: Optional[str] = None,
     ):
         try:
-            # Build update dict, skipping None values and _id
-            update_fields = {}
-            if name is not None:
-                update_fields["name"] = name
-            if category is not None:
-                update_fields["category"] = category
-            if price_per_unit is not None:
-                update_fields["price_per_unit"] = price_per_unit
-            if unit is not None:
-                update_fields["unit"] = unit
-            if available_quantity is not None:
-                update_fields["available_quantity"] = available_quantity
-            if supplier_id is not None:
-                update_fields["supplier_id"] = supplier_id
-            if location is not None:
-                update_fields["location"] = location
-            if image_url is not None:
-                update_fields["image_url"] = image_url
-
-            if not update_fields:
-                raise HTTPException(status_code=400, detail="No fields to update.")
-
-            # def serialize_mongo_document(doc):
-            #     if not doc:
-            #         return doc
-            #     doc = dict(doc)
-            #     if "_id" in doc and isinstance(doc["_id"], ObjectId):
-            #         doc["_id"] = str(doc["_id"])
-            #     return doc
-
+            # Remove None values
+            update_data = {k: v for k, v in locals().items() if k != 'product_id' and v is not None}
+            
+            if not update_data:
+                raise HTTPException(status_code=400, detail="No valid fields to update")
+            
             result = db["products"].update_one(
                 {"_id": ObjectId(product_id)},
-                {"$set": update_fields}
+                {"$set": update_data}
             )
-
+            
             if result.matched_count == 0:
-                raise HTTPException(status_code=404, detail="Product not found.")
-
-            # Return the updated product
+                raise HTTPException(status_code=404, detail="Product not found")
+            
+            # Return updated product
             updated_product = db["products"].find_one({"_id": ObjectId(product_id)})
-            if not updated_product:
-                raise HTTPException(status_code=404, detail="Product not found after update.")
-            # Serialize ObjectId to str for JSON response
-
-            if "_id" in updated_product and isinstance(updated_product["_id"], ObjectId):
-                updated_product["_id"] = str(updated_product["_id"])
-
-            return updated_product
-
-        except HTTPException as http_exc:
-            raise http_exc
+            return serialize_for_json(updated_product)
+        except HTTPException:
+            raise
         except Exception as e:
-            print(f"Error updating product: {e}")
-            raise HTTPException(status_code=500, detail=f"Product update failed: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Failed to update product: {str(e)}")
         
 # get the all product 
 
     @staticmethod
     def get_all_products():
+        """Get all products"""
         try:
-            products_cursor = db["products"].find()
-            products = []
-            for product in products_cursor:
-                # Convert ObjectId to str for JSON serialization
-                if "_id" in product and isinstance(product["_id"], ObjectId):
-                    product["_id"] = str(product["_id"])
-                products.append(product)
-            return products
+            products = list(db["products"].find({}))
+            # Serialize all products for JSON
+            serialized_products = []
+            for product in products:
+                serialized_product = serialize_for_json(product)
+                serialized_products.append(serialized_product)
+            return serialized_products
         except Exception as e:
-            print(f"Error fetching products: {e}")
             raise HTTPException(status_code=500, detail=f"Failed to fetch products: {str(e)}")
-        
-# get products by supplier
+
+    @staticmethod
+    def get_my_products(supplier_id: str):
+        """Get all products for the current supplier"""
+        try:
+            products = list(db["products"].find({"supplier_id": supplier_id}))
+            print(f"DEBUG: Found {len(products)} products")
+            
+            # Serialize all products for JSON
+            serialized_products = []
+            for product in products:
+                serialized_product = serialize_for_json(product)
+                serialized_products.append(serialized_product)
+            
+            return serialized_products
+        except Exception as e:
+            print(f"DEBUG: Error getting products: {e}")
+            raise HTTPException(status_code=500, detail=f"Failed to fetch products: {str(e)}")
+
+# Keep the existing get_products_by_supplier method for backward compatibility
     @staticmethod
     def get_products_by_supplier(supplier_id: str):
+        """Get all products for a particular supplier"""
         try:
-            products_cursor = db["products"].find({"supplier_id": supplier_id})
-            products = []
-            for product in products_cursor:
-                if "_id" in product and isinstance(product["_id"], ObjectId):
-                    product["_id"] = str(product["_id"])
-                products.append(product)
-            return products
+            products = list(db["products"].find({"supplier_id": supplier_id}))
+            # Serialize all products for JSON
+            serialized_products = []
+            for product in products:
+                serialized_product = serialize_for_json(product)
+                serialized_products.append(serialized_product)
+            return serialized_products
         except Exception as e:
-            print(f"Error fetching products for supplier: {e}")
             raise HTTPException(status_code=500, detail=f"Failed to fetch products for supplier: {str(e)}")
-        
-# delete product
+            
+    # delete product
     @staticmethod
     def delete_product(product_id: str):
-        try:
-            result = db["products"].delete_one({"_id": ObjectId(product_id)})
-            if result.deleted_count == 0:
-                raise HTTPException(status_code=404, detail="Product not found.")
-            return {"message": "Product deleted successfully", "product_id": product_id}
-        except HTTPException as http_exc:
-            raise http_exc
-        except Exception as e:
-            print(f"Error deleting product: {e}")
-            raise HTTPException(status_code=500, detail=f"Product deletion failed: {str(e)}")
-        
-# get product by id
+            """Delete a product"""
+            try:
+                result = db["products"].delete_one({"_id": ObjectId(product_id)})
+                if result.deleted_count == 0:
+                    raise HTTPException(status_code=404, detail="Product not found")
+                return {"message": "Product deleted successfully"}
+            except HTTPException:
+                raise
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=f"Failed to delete product: {str(e)}")
+            
+    # get product by id
     @staticmethod
     def get_product_by_id(product_id: str):
-        """Get product details by product_id"""
-        try:
-            product = db["products"].find_one({"_id": ObjectId(product_id)})
-            if not product:
-                raise HTTPException(status_code=404, detail="Product not found.")
-            if "_id" in product and isinstance(product["_id"], ObjectId):
-                product["_id"] = str(product["_id"])
-            return product
-        except Exception as e:
-            print(f"Error fetching product: {e}")
-            raise HTTPException(status_code=500, detail=f"Failed to fetch product: {str(e)}")
+            """Get a product by ID"""
+            try:
+                product = db["products"].find_one({"_id": ObjectId(product_id)})
+                if not product:
+                    raise HTTPException(status_code=404, detail="Product not found")
+                return serialize_for_json(product)
+            except HTTPException:
+                raise
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=f"Failed to fetch product: {str(e)}")
 

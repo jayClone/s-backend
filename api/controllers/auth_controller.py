@@ -1,9 +1,14 @@
-from fastapi import HTTPException, Request
+from fastapi import HTTPException, Request, Depends
 from fastapi.responses import JSONResponse
 from json import JSONDecodeError
 from api import db
 from api.models.user.User import User
 from api.models.user.Role import Role
+from api.extensions.jwt.dependencies import get_current_user
+from datetime import datetime
+from bson import ObjectId
+from typing import Any, Dict
+from api.extensions.helper.json_serializer import serialize_for_json, clean_user_data
 
 async def signup(request: Request):
     try:
@@ -101,3 +106,54 @@ async def reset_password(request: Request):
         return JSONResponse(content={"message": "Password reset successful"}, status_code=200)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to reset password: {str(e)}")
+
+async def update_profile(request: Request, current_user: dict = Depends(get_current_user)):
+    try:
+        data = await request.json()
+    except JSONDecodeError:
+        raise HTTPException(status_code=400, detail="Request body cannot be empty")
+    
+    # Use current user's ID from JWT token
+    user_id = current_user["_id"]
+    
+    # Validate update data
+    allowed_fields = {"name", "email", "phone1", "phone2", "current_password", "new_password"}
+    update_data = {k: v for k, v in data.items() if k in allowed_fields and v is not None}
+    
+    if not update_data:
+        raise HTTPException(status_code=400, detail="No valid fields to update")
+    
+    # Validate password requirements if changing password
+    if "new_password" in update_data:
+        if len(update_data["new_password"]) < 6:
+            raise HTTPException(status_code=400, detail="Password must be at least 6 characters long")
+    
+    try:
+        result = User.update_profile(user_id, update_data)
+        return JSONResponse(
+            content={
+                "message": "Profile updated successfully",
+                "data": result
+            },
+            status_code=200
+        )
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Profile update failed: {str(e)}")
+
+async def get_profile(current_user: dict = Depends(get_current_user)):
+    """Get current user's profile"""
+    try:
+        # Clean and serialize user data
+        user_data = clean_user_data(current_user)
+        
+        return JSONResponse(
+            content={
+                "message": "Profile retrieved successfully",
+                "data": user_data
+            },
+            status_code=200
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve profile: {str(e)}")

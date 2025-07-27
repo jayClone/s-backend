@@ -9,6 +9,7 @@ from fastapi import HTTPException
 # from api.models.payment.Payment import PaymentModel
 # from api.models.user.User import UserModel
 from api.db import db  # Ensure this import is correct
+from api.extensions.helper.json_serializer import serialize_for_json
 
 
 class OrderModel(BaseModel):
@@ -59,7 +60,7 @@ class Order:
             order_data["status"] = "pending"
             result = db["orders"].insert_one(order_data)
             order_data["_id"] = str(result.inserted_id)
-            return order_data
+            return serialize_for_json(order_data)
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Failed to create booking: {str(e)}")
 
@@ -89,7 +90,7 @@ class Order:
                 booking["_id"] = str(booking["_id"])
                 if "order_date" in booking and isinstance(booking["order_date"], datetime):
                     booking["order_date"] = booking["order_date"].isoformat()
-            return bookings
+            return serialize_for_json(bookings)
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Failed to fetch bookings: {str(e)}")
         
@@ -104,7 +105,7 @@ class Order:
                 booking["_id"] = str(booking["_id"])
                 if "order_date" in booking and isinstance(booking["order_date"], datetime):
                     booking["order_date"] = booking["order_date"].isoformat()
-            return bookings
+            return serialize_for_json(bookings)
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Failed to fetch bookings: {str(e)}")    
 
@@ -113,13 +114,16 @@ class Order:
     def update_booking_status(booking_id: str, status: str):
         """Update booking status"""
         try:
+            valid_statuses = ["pending", "confirmed", "delivered", "cancelled"]
+            if status not in valid_statuses:
+                raise HTTPException(status_code=400, detail=f"Invalid status. Must be one of: {valid_statuses}")
             result = db["orders"].update_one(
                 {"_id": ObjectId(booking_id)},
                 {"$set": {"status": status}}
             )
             if result.matched_count == 0:
                 raise HTTPException(status_code=404, detail="Booking not found")
-            return Order.get_booking_by_id(booking_id)
+            return serialize_for_json(Order.get_booking_by_id(booking_id))
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Failed to update booking: {str(e)}")
 
