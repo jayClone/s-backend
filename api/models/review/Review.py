@@ -63,7 +63,7 @@ class ReviewModel(BaseModel):
         
     # list reviews by vendor_id and supplier_id
     @staticmethod
-    def list_reviews(vendor_id: str = None, supplier_id: str = None):
+    def list_reviews(vendor_id: Optional[str] = None, supplier_id: Optional[str] = None):
         try:
             query = {}
             if vendor_id:
