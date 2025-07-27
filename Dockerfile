@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 ARG PYTHON_VERSION=3.10.10
-FROM python:${PYTHON_VERSION}-slim AS base
+FROM python:3.10-slim AS base
 
 # Prevents Python from writing pyc files.
 ENV PYTHONDONTWRITEBYTECODE=1
@@ -23,6 +23,9 @@ RUN adduser \
     --no-create-home \
     --uid "${UID}" \
     appuser
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y ca-certificates openssl
 
 # Download dependencies as a separate step to take advantage of Docker's caching.
 # Leverage a cache mount to /root/.cache/pip to speed up subsequent builds.`
